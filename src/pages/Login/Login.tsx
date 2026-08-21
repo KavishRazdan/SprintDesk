@@ -41,7 +41,7 @@ export const Login: React.FC = () => {
       {/* Main Split Container */}
       <div className="w-full max-w-5xl bg-[#050C0A] border border-white/10 rounded-3xl shadow-[0_0_60px_rgba(0,0,0,0.8)] overflow-hidden grid grid-cols-1 md:grid-cols-2 min-h-[580px] relative z-10 my-auto">
         
-        {/* LEFT SIDE: Futuristic Typography & Watermark matching reference pic */}
+        {/* LEFT SIDE: Futuristic Typography & Watermark */}
         <div className="p-8 sm:p-10 lg:p-12 flex flex-col justify-between relative bg-gradient-to-b from-[#071410] to-[#030A08] border-b md:border-b-0 md:border-r border-white/10 overflow-hidden">
           {/* Top Headline */}
           <div className="relative z-10 space-y-1 mt-2">
@@ -56,20 +56,13 @@ export const Login: React.FC = () => {
             </h2>
           </div>
 
-          {/* Subtitle Message matching reference picture */}
-          <div className="relative z-10 mt-auto pt-16 pb-8">
-            <p className="text-xs sm:text-sm text-slate-400 max-w-[260px] leading-relaxed font-medium">
-              Seamlessly Enhance The Future Through Our Sprint Technology
-            </p>
-          </div>
-
-          {/* Giant Bottom Watermark matching reference picture */}
+          {/* Giant Bottom Watermark */}
           <div className="absolute bottom-0 left-6 select-none pointer-events-none opacity-[0.06] font-heading font-extrabold text-8xl lg:text-9xl text-white tracking-widest leading-none">
             SPRINT
           </div>
         </div>
 
-        {/* RIGHT SIDE: Form & Authentication matching reference pic */}
+        {/* RIGHT SIDE: Form & Authentication */}
         <div className="p-6 sm:p-8 lg:p-10 flex flex-col justify-between items-center bg-[#050C0A]">
           <div className="w-full max-w-md my-auto space-y-5">
             {/* Heading */}
