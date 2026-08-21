@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-primary: #F4F2EE;
+    --bg-secondary: #EFECE6;
+    --bg-surface: #FFFFFF;
+    --text-primary: #1C1C1C;
+    --text-secondary: #8A8A8A;
+    --border-color: #E5E2DC;
+    --accent-sage: #728974;
+    --accent-sage-dark: #5E7160;
+  }
+
+  html.dark {
+    --bg-primary: #020B09;
+    --bg-secondary: #041F18;
+    --bg-surface: #0A1513;
+    --text-primary: #FFFFFF;
+    --text-secondary: #A1A1AA;
+    --border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Warm Beige & Sage Green Card Panel Styling */
+.card-panel {
+  background-color: #FFFFFF;
+  border-radius: 1.5rem; /* rounded-3xl */
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  padding: 1.5rem; /* p-6 */
+  transition: all 0.2s ease-in-out;
+}
+
+html.dark .card-panel {
+  background-color: #0A1513;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 25px rgba(4, 31, 24, 0.6);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #020B09;
+}
+
+html:not(.dark) ::-webkit-scrollbar-track {
+  background: #F4F2EE;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(114, 137, 116, 0.35);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(114, 137, 116, 0.6);
+}
