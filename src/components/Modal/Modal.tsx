@@ -29,6 +29,11 @@ export const Modal: React.FC<ModalProps> = ({
   const titleId = useId();
   const descId = useId();
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -36,7 +41,7 @@ export const Modal: React.FC<ModalProps> = ({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -66,25 +71,29 @@ export const Modal: React.FC<ModalProps> = ({
     document.addEventListener('keydown', handleKeyDown);
     document.body.style.overflow = 'hidden';
 
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       if (modalRef.current) {
-        const firstInput = modalRef.current.querySelector<HTMLElement>('input, button');
-        if (firstInput) {
-          firstInput.focus();
-        } else {
-          modalRef.current.focus();
+        // Do not steal focus if user is already focused on an element inside the modal
+        if (!modalRef.current.contains(document.activeElement)) {
+          const firstInput = modalRef.current.querySelector<HTMLElement>('input, button');
+          if (firstInput) {
+            firstInput.focus();
+          } else {
+            modalRef.current.focus();
+          }
         }
       }
     }, 50);
 
     return () => {
+      clearTimeout(timer);
       document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'unset';
       if (previousActiveElement.current) {
         previousActiveElement.current.focus();
       }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

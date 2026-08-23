@@ -25,6 +25,7 @@ This document provides the complete submission package for **SprintDesk** in acc
 
 ---
 
+
 ## 8.2. Architecture Document
 
 ### System Architecture Overview
