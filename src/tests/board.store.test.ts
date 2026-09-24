@@ -68,4 +68,49 @@ describe('Zustand Board Store', () => {
     expect(filters.searchQuery).toBe('OAuth');
     expect(filters.priority).toBe('Urgent');
   });
+
+  it('should reorder tasks within the same column', () => {
+    const backlogTasks = useBoardStore.getState().tasks.filter((t) => t.status === 'Backlog');
+    expect(backlogTasks.length).toBeGreaterThanOrEqual(2);
+
+    const firstTask = backlogTasks[0];
+    const secondTask = backlogTasks[1];
+
+    useBoardStore.getState().reorderTasks(firstTask.id, secondTask.id);
+
+    const updatedBacklog = useBoardStore.getState().tasks.filter((t) => t.status === 'Backlog');
+    expect(updatedBacklog[0].id).toBe(secondTask.id);
+    expect(updatedBacklog[1].id).toBe(firstTask.id);
+  });
+
+  it('should move tasks between different columns and update status', () => {
+    const backlogTasks = useBoardStore.getState().tasks.filter((t) => t.status === 'Backlog');
+    const taskToMove = backlogTasks[0];
+
+    useBoardStore.getState().moveTask(taskToMove.id, 'Review');
+
+    const updatedTask = useBoardStore.getState().tasks.find((t) => t.id === taskToMove.id);
+    expect(updatedTask?.status).toBe('Review');
+  });
+
+  it('should allow undoing a drag and drop move', () => {
+    const targetTaskId = INITIAL_TASKS[0].id;
+    const initialStatus = INITIAL_TASKS[0].status;
+
+    useBoardStore.getState().moveTask(targetTaskId, 'Done', undefined, true);
+    expect(useBoardStore.getState().tasks.find((t) => t.id === targetTaskId)?.status).toBe('Done');
+
+    const undid = useBoardStore.getState().undoLastAction();
+    expect(undid).toBe(true);
+    expect(useBoardStore.getState().tasks.find((t) => t.id === targetTaskId)?.status).toBe(initialStatus);
+  });
+
+  it('should support transient moves without polluting the undo history stack', () => {
+    const initialHistoryLength = useBoardStore.getState().historyStack.length;
+    const targetTaskId = INITIAL_TASKS[0].id;
+
+    useBoardStore.getState().moveTask(targetTaskId, 'In Progress', 0, false);
+
+    expect(useBoardStore.getState().historyStack.length).toBe(initialHistoryLength);
+  });
 });

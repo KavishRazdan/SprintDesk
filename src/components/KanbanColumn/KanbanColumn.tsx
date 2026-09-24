@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Task, TaskStatus } from '../../types/task.types';
@@ -25,10 +25,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = React.memo(
   ({ status, tasks, onTaskClick, onAddTaskClick }) => {
     const { setNodeRef, isOver } = useDroppable({
       id: status,
+      data: {
+        type: 'Column',
+        status,
+      },
     });
 
-    const taskIds = tasks.map((t) => t.id);
-    const totalStoryPoints = tasks.reduce((sum, t) => sum + t.storyPoints, 0);
+    const taskIds = useMemo(() => tasks.map((t) => t.id), [tasks]);
+    const totalStoryPoints = useMemo(() => tasks.reduce((sum, t) => sum + t.storyPoints, 0), [tasks]);
 
     return (
       <div

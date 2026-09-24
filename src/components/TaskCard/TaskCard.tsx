@@ -9,9 +9,10 @@ import { clsx } from 'clsx';
 export interface TaskCardProps {
   task: Task;
   onClick?: (task: Task) => void;
+  isOverlay?: boolean;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = React.memo(({ task, onClick }) => {
+export const TaskCard: React.FC<TaskCardProps> = React.memo(({ task, onClick, isOverlay = false }) => {
   const {
     attributes,
     listeners,
@@ -19,31 +20,46 @@ export const TaskCard: React.FC<TaskCardProps> = React.memo(({ task, onClick }) 
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: task.id });
+  } = useSortable({
+    id: task.id,
+    disabled: isOverlay,
+    data: {
+      type: 'Task',
+      task,
+    },
+  });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  const style = isOverlay
+    ? undefined
+    : {
+        transform: CSS.Translate.toString(transform),
+        transition,
+      };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      onClick={() => onClick && onClick(task)}
+      {...attributes}
+      {...listeners}
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('button, a, input, [data-no-dnd]')) return;
+        onClick?.(task);
+      }}
       className={clsx(
-        'group relative bg-white dark:bg-[#0A1513] text-[#1C1C1C] dark:text-white border border-slate-200/50 dark:border-white/10 rounded-2xl p-4 shadow-[0_4px_15px_rgba(0,0,0,0.02)] hover:border-[#728974] hover:shadow-[0_4px_20px_rgba(0,0,0,0.05)] transition-all duration-200 cursor-pointer select-none',
-        isDragging && 'opacity-60 border-[#728974] ring-2 ring-[#728974]/40 shadow-xl scale-[1.03] z-50'
+        'group relative bg-white dark:bg-[#0A1513] text-[#1C1C1C] dark:text-white border rounded-2xl p-4 transition-all duration-200 cursor-grab active:cursor-grabbing select-none',
+        isOverlay
+          ? 'border-[#728974] ring-2 ring-[#728974]/50 shadow-2xl rotate-1 scale-[1.02] z-[9999] opacity-95 bg-white/95 dark:bg-[#0A1513]/95 backdrop-blur-md cursor-grabbing'
+          : isDragging
+          ? 'opacity-30 border-dashed border-2 border-[#728974] bg-[#E8EFE9]/40 dark:bg-[#00F5A0]/5 shadow-none'
+          : 'border-slate-200/50 dark:border-white/10 shadow-[0_4px_15px_rgba(0,0,0,0.02)] hover:border-[#728974] hover:shadow-[0_4px_20px_rgba(0,0,0,0.05)]'
       )}
     >
       {/* Header: ID & Drag Handle & Priority */}
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <div className="flex items-center gap-1.5">
           <span
-            {...attributes}
-            {...listeners}
-            onClick={(e) => e.stopPropagation()}
-            className="p-1 rounded text-[#8A8A8A] hover:text-[#728974] cursor-grab active:cursor-grabbing transition-colors"
+            className="p-1 rounded text-[#8A8A8A] group-hover:text-[#728974] cursor-grab active:cursor-grabbing transition-colors"
             title="Drag task"
           >
             <GripVertical className="w-3.5 h-3.5" />

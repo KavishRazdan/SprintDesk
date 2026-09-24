@@ -10,8 +10,10 @@ interface BoardState {
   selectedTaskId: string | null;
 
   // Drag and Drop Actions
-  moveTask: (taskId: string, targetStatus: TaskStatus, newIndex?: number) => void;
-  reorderTasks: (activeId: string, overId: string) => void;
+  moveTask: (taskId: string, targetStatus: TaskStatus, newIndex?: number, recordHistory?: boolean) => void;
+  reorderTasks: (activeId: string, overId: string, recordHistory?: boolean) => void;
+  setTasks: (tasks: Task[], recordHistory?: boolean) => void;
+  recordHistorySnapshot: (snapshot?: Task[]) => void;
   undoLastAction: () => boolean;
 
   // CRUD Actions
@@ -43,7 +45,7 @@ export const useBoardStore = create<BoardState>()(
       filters: initialFilters,
       selectedTaskId: null,
 
-      moveTask: (taskId, targetStatus, newIndex) =>
+      moveTask: (taskId, targetStatus, newIndex, recordHistory = true) =>
         set((state) => {
           const taskIndex = state.tasks.findIndex((t) => t.id === taskId);
           if (taskIndex === -1) return state;
@@ -51,10 +53,12 @@ export const useBoardStore = create<BoardState>()(
           const task = state.tasks[taskIndex];
           if (task.status === targetStatus && newIndex === undefined) return state;
 
-          // Save history snapshot before mutation
-          const newHistory = [state.tasks, ...state.historyStack].slice(0, 10);
+          // Save history snapshot before mutation if recordHistory is true
+          const newHistory = recordHistory
+            ? [state.tasks, ...state.historyStack].slice(0, 10)
+            : state.historyStack;
 
-          const updatedTask = {
+          const updatedTask: Task = {
             ...task,
             status: targetStatus,
             updatedAt: new Date().toISOString(),
@@ -72,29 +76,74 @@ export const useBoardStore = create<BoardState>()(
           return { tasks: [...remainingTasks, updatedTask], historyStack: newHistory };
         }),
 
-      reorderTasks: (activeId, overId) =>
+      reorderTasks: (activeId, overId, recordHistory = true) =>
         set((state) => {
           if (activeId === overId) return state;
 
-          const oldIndex = state.tasks.findIndex((t) => t.id === activeId);
-          const newIndex = state.tasks.findIndex((t) => t.id === overId);
+          const activeTask = state.tasks.find((t) => t.id === activeId);
+          const overTask = state.tasks.find((t) => t.id === overId);
 
-          if (oldIndex === -1 || newIndex === -1) return state;
+          if (!activeTask || !overTask) return state;
 
-          const newHistory = [state.tasks, ...state.historyStack].slice(0, 10);
+          const newHistory = recordHistory
+            ? [state.tasks, ...state.historyStack].slice(0, 10)
+            : state.historyStack;
 
-          const updatedTasks = [...state.tasks];
-          const [movedTask] = updatedTasks.splice(oldIndex, 1);
-          
-          const overTask = state.tasks[newIndex];
-          if (movedTask.status !== overTask.status) {
-            movedTask.status = overTask.status;
-            movedTask.updatedAt = new Date().toISOString();
+          // Same column reordering: use precise column-relative positions
+          if (activeTask.status === overTask.status) {
+            const status = activeTask.status;
+            const columnTasks = state.tasks.filter((t) => t.status === status);
+            const oldIndex = columnTasks.findIndex((t) => t.id === activeId);
+            const newIndex = columnTasks.findIndex((t) => t.id === overId);
+
+            if (oldIndex !== -1 && newIndex !== -1) {
+              const reorderedColumn = [...columnTasks];
+              const [moved] = reorderedColumn.splice(oldIndex, 1);
+              reorderedColumn.splice(newIndex, 0, moved);
+
+              const otherTasks = state.tasks.filter((t) => t.status !== status);
+              return { tasks: [...otherTasks, ...reorderedColumn], historyStack: newHistory };
+            }
           }
 
-          updatedTasks.splice(newIndex, 0, movedTask);
-          return { tasks: updatedTasks, historyStack: newHistory };
+          // Cross-column reordering: move to overTask column at overTask index
+          const targetStatus = overTask.status;
+          const updatedActiveTask: Task = {
+            ...activeTask,
+            status: targetStatus,
+            updatedAt: new Date().toISOString(),
+          };
+
+          const targetStatusTasks = state.tasks.filter(
+            (t) => t.status === targetStatus && t.id !== activeId
+          );
+          const overIndex = targetStatusTasks.findIndex((t) => t.id === overId);
+
+          if (overIndex !== -1) {
+            targetStatusTasks.splice(overIndex, 0, updatedActiveTask);
+          } else {
+            targetStatusTasks.push(updatedActiveTask);
+          }
+
+          const otherTasks = state.tasks.filter(
+            (t) => t.status !== targetStatus && t.id !== activeId
+          );
+
+          return { tasks: [...otherTasks, ...targetStatusTasks], historyStack: newHistory };
         }),
+
+      setTasks: (tasks, recordHistory = false) =>
+        set((state) => ({
+          tasks,
+          historyStack: recordHistory
+            ? [state.tasks, ...state.historyStack].slice(0, 10)
+            : state.historyStack,
+        })),
+
+      recordHistorySnapshot: (snapshot) =>
+        set((state) => ({
+          historyStack: [snapshot || state.tasks, ...state.historyStack].slice(0, 10),
+        })),
 
       undoLastAction: () => {
         const { historyStack } = get();

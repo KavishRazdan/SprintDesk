@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   DndContext,
   DragOverlay,
   closestCorners,
+  pointerWithin,
+  rectIntersection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -11,8 +13,11 @@ import {
   DragStartEvent,
   DragOverEvent,
   DragEndEvent,
+  DragCancelEvent,
+  CollisionDetection,
+  defaultDropAnimationSideEffects,
 } from '@dnd-kit/core';
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable';
 import { useBoard } from '../../hooks/useBoard';
 import { KanbanColumn } from '../../components/KanbanColumn';
 import { TaskCard } from '../../components/TaskCard';
@@ -49,6 +54,8 @@ export const Board: React.FC = () => {
     selectedTaskId,
     moveTask,
     reorderTasks,
+    setTasks,
+    recordHistorySnapshot,
     addTask,
     updateTask,
     deleteTask,
@@ -68,6 +75,69 @@ export const Board: React.FC = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [newCommentText, setNewCommentText] = useState('');
   const toast = useToast();
+
+  const dragInitialTasksRef = useRef<Task[] | null>(null);
+  const dragStartStatusRef = useRef<TaskStatus | null>(null);
+
+  // Helper to determine which container (column) an ID belongs to
+  const findContainer = useCallback(
+    (id: string | null | undefined): TaskStatus | null => {
+      if (!id) return null;
+      if (COLUMNS.includes(id as TaskStatus)) {
+        return id as TaskStatus;
+      }
+      const task = allTasks.find((t) => t.id === id);
+      return task ? task.status : null;
+    },
+    [allTasks]
+  );
+
+  // Robust Kanban collision detection: pointer intersections first, then rect, then corners
+  const collisionDetectionStrategy: CollisionDetection = useCallback((args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) {
+      const taskCollision = pointerCollisions.find(
+        (c) => !COLUMNS.includes(c.id as TaskStatus)
+      );
+      if (taskCollision) {
+        return [taskCollision];
+      }
+      return pointerCollisions;
+    }
+
+    const rectCollisions = rectIntersection(args);
+    if (rectCollisions.length > 0) {
+      const taskCollision = rectCollisions.find(
+        (c) => !COLUMNS.includes(c.id as TaskStatus)
+      );
+      if (taskCollision) {
+        return [taskCollision];
+      }
+      return rectCollisions;
+    }
+
+    return closestCorners(args);
+  }, []);
+
+  // Screen-reader live accessibility announcements
+  const announcements = {
+    onDragStart({ active }: DragStartEvent) {
+      return `Picked up task card ${active.id}.`;
+    },
+    onDragOver({ active, over }: DragOverEvent) {
+      if (!over) return '';
+      return `Task ${active.id} moved over ${over.id}.`;
+    },
+    onDragEnd({ active, over }: DragEndEvent) {
+      if (!over) {
+        return `Task ${active.id} was dropped.`;
+      }
+      return `Task ${active.id} was dropped into ${over.id}.`;
+    },
+    onDragCancel({ active }: DragCancelEvent) {
+      return `Dragging task ${active.id} was cancelled. Task returned to starting position.`;
+    },
+  };
 
   // Create Task Form State
   const [newTaskTitle, setNewTaskTitle] = useState('');
@@ -91,7 +161,11 @@ export const Board: React.FC = () => {
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
     const task = allTasks.find((t) => t.id === active.id);
-    if (task) setActiveTask(task);
+    if (task) {
+      dragInitialTasksRef.current = [...allTasks];
+      dragStartStatusRef.current = task.status;
+      setActiveTask(task);
+    }
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -103,28 +177,109 @@ export const Board: React.FC = () => {
 
     if (activeId === overId) return;
 
-    if (COLUMNS.includes(overId as TaskStatus)) {
+    const activeContainer = findContainer(activeId);
+    const overContainer = findContainer(overId);
+
+    if (!activeContainer || !overContainer) return;
+
+    // When crossing columns, move task into the target column transiently
+    if (activeContainer !== overContainer) {
       const activeTaskItem = allTasks.find((t) => t.id === activeId);
-      if (activeTaskItem && activeTaskItem.status !== overId) {
-        moveTask(activeId, overId as TaskStatus);
+      if (!activeTaskItem) return;
+
+      const isOverAColumn = COLUMNS.includes(overId as TaskStatus);
+      const overColumnTasks = allTasks.filter(
+        (t) => t.status === overContainer && t.id !== activeId
+      );
+
+      let newIndex: number;
+      if (isOverAColumn) {
+        newIndex = overColumnTasks.length;
+      } else {
+        const overIndex = overColumnTasks.findIndex((t) => t.id === overId);
+        const isBelowOverItem =
+          over &&
+          active.rect.current.translated &&
+          active.rect.current.translated.top > over.rect.top + over.rect.height / 2;
+
+        const modifier = isBelowOverItem ? 1 : 0;
+        newIndex = overIndex >= 0 ? overIndex + modifier : overColumnTasks.length;
       }
+
+      // Move task transiently between columns without recording undo history on every frame
+      moveTask(activeId, overContainer, newIndex, false);
     }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    setActiveTask(null);
+    const initialTasks = dragInitialTasksRef.current;
+    const initialStatus = dragStartStatusRef.current;
 
-    if (!over) return;
+    setActiveTask(null);
+    dragInitialTasksRef.current = null;
+    dragStartStatusRef.current = null;
+
+    if (!over) {
+      if (initialTasks) {
+        setTasks(initialTasks, false);
+      }
+      return;
+    }
 
     const activeId = String(active.id);
     const overId = String(over.id);
 
-    if (COLUMNS.includes(overId as TaskStatus)) {
-      moveTask(activeId, overId as TaskStatus);
-    } else {
-      reorderTasks(activeId, overId);
+    const activeContainer = findContainer(activeId);
+    const overContainer = findContainer(overId);
+
+    if (!activeContainer || !overContainer) {
+      if (initialTasks) {
+        setTasks(initialTasks, false);
+      }
+      return;
     }
+
+    // 1. Reordering within the same column
+    if (activeContainer === overContainer) {
+      const columnTasks = allTasks.filter((t) => t.status === activeContainer);
+      const oldIndex = columnTasks.findIndex((t) => t.id === activeId);
+      let newIndex = columnTasks.findIndex((t) => t.id === overId);
+
+      if (newIndex === -1 && COLUMNS.includes(overId as TaskStatus)) {
+        newIndex = columnTasks.length - 1;
+      }
+
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        const reorderedColumnTasks = arrayMove(columnTasks, oldIndex, newIndex);
+        const otherTasks = allTasks.filter((t) => t.status !== activeContainer);
+        const updatedTasks = [...otherTasks, ...reorderedColumnTasks];
+
+        if (initialTasks) {
+          recordHistorySnapshot(initialTasks);
+        }
+        setTasks(updatedTasks, false);
+        toast.success(`Reordered task in ${activeContainer}`);
+        return;
+      }
+    }
+
+    // 2. Finalize cross-column move if status changed from start of drag
+    if (initialStatus && activeContainer !== initialStatus) {
+      if (initialTasks) {
+        recordHistorySnapshot(initialTasks);
+      }
+      toast.success(`Moved task to ${activeContainer}`);
+    }
+  };
+
+  const handleDragCancel = () => {
+    if (dragInitialTasksRef.current) {
+      setTasks(dragInitialTasksRef.current, false);
+      dragInitialTasksRef.current = null;
+    }
+    dragStartStatusRef.current = null;
+    setActiveTask(null);
   };
 
   const handleUndo = () => {
@@ -399,10 +554,12 @@ export const Board: React.FC = () => {
       {/* Kanban Board Drag Context */}
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={collisionDetectionStrategy}
+        accessibility={{ announcements }}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <div className="flex gap-4 overflow-x-auto pb-6 pt-2 scrollbar-thin scrollbar-thumb-[#728974]/30 min-h-[600px]">
           {COLUMNS.map((columnStatus) => (
@@ -419,8 +576,22 @@ export const Board: React.FC = () => {
           ))}
         </div>
 
-        {/* Dragging Overlay */}
-        <DragOverlay>{activeTask ? <TaskCard task={activeTask} /> : null}</DragOverlay>
+        {/* Dragging Overlay with smooth drop animation */}
+        <DragOverlay
+          dropAnimation={{
+            duration: 220,
+            easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+            sideEffects: defaultDropAnimationSideEffects({
+              styles: {
+                active: {
+                  opacity: '0.4',
+                },
+              },
+            }),
+          }}
+        >
+          {activeTask ? <TaskCard task={activeTask} isOverlay /> : null}
+        </DragOverlay>
       </DndContext>
 
       {/* Render Side Drawer at document.body level via Portal */}
